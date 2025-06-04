@@ -33,7 +33,7 @@ bun run dev
 
 1. [Clerk](https://clerk.com/)
 
-    > Clerk 인증 및 사용자 관리 서비스
+    > Clerk: 인증 및 사용자 관리 서비스
 
     ```bash
     # Install
@@ -84,4 +84,71 @@ bun run dev
     +   </ ClerkProvider>
     );
     ...
+    ```
+
+2. [Drizzle ORM](https://orm.drizzle.team/) with [Neon](https://neon.com/)
+
+    > Drizzle ORM: 관계형 및 SQL과 유사한 쿼리 API를 모두 갖춘 유일한 ORM(Object Relational Mapping)
+    > Neon: 서버리스 Postgres 플랫폼
+
+    ```bash
+    # Install
+    bun add drizzle-orm@0.44.2 @neondatabase/serverless@1.0.0 dotenv@16.5.0
+    bun add -D drizzle-kit@0.31.1 tsx@4.19.4
+    ```
+
+    ```diff
+    // .env.local
+    ...
+
+    + DATABASE_URL=YOUR_URL
+    ```
+
+    [`src/db/index.ts`](./src/db/index.ts):
+
+    ```typescript
+    import { drizzle } from "drizzle-orm/neon-http";
+
+    const db = drizzle(process.env.DATABASE_URL!);
+    ```
+
+    [`src/db/schema.ts`](./src/db/schema.ts):
+
+    ```typescript
+    import { pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+
+    export const users = pgTable("users", {
+      id: uuid("id").primaryKey().defaultRandom(),
+      clerkId: text("clerk_id").unique().notNull(),
+      name: text("name").notNull(),
+      imageUrl: text("image_url").notNull(),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    }, (t) => [uniqueIndex("clerk_id_idx").on(t.clerkId)]);
+    ```
+
+    [`drizzle.config.ts`](./drizzle.config.ts):
+
+    ```typescript
+    import dotenv from "dotenv";
+    import { defineConfig } from 'drizzle-kit';
+
+    dotenv.config({path: ".env.local"})
+
+    export default defineConfig({
+      out: './drizzle',
+      schema: './src/db/schema.ts',
+      dialect: 'postgresql',
+      dbCredentials: {
+        url: process.env.DATABASE_URL!,
+      },
+    });
+    ```
+
+    ```bash
+    # Apply changes to the database
+    bunx drizzle-kit push
+
+    # Studio
+    bunx drizzle-kit studio
     ```
