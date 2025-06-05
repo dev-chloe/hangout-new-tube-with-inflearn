@@ -152,3 +152,62 @@ bun run dev
     # Studio
     bunx drizzle-kit studio
     ```
+
+3. [ngrok](https://ngrok.com/)
+
+    > ngrok: 로컬에서 실행 중인 서버를 인터넷에서 접근 가능한 공용 URL로 안전하게 노출시켜주는 도구
+
+    ```bash
+    # Install
+    brew install ngrok
+
+    # Add authtoken
+    ngrok config add-authtoken YOUR_KEY
+
+    # Check
+    ngrok http --url=viper-certain-early.ngrok-free.app 3000
+    ```
+
+    > ngrok가 만들어준 url을 이용하여 clerk의 `configure > webhook`에서 연동해준다.
+    > 예시: `https://my-url/api/users/webhook`
+    > 연동 후 Signing Secret을 .env에 추가
+
+    ```diff
+    // .evn.local
+    ...
+    CLERK_SIGNING_SECRET=YOUR_SIGNING_SECRET
+    ```
+
+4. [concurrently](https://github.com/open-cli-tools/concurrently)
+
+    > concurrently: 여러 개의 명령어를 동시에 실행할 수 있도록 해주는 Npm 패키지
+
+    ```bash
+    # Install
+    bun add concurrently@9.1.2
+    ```
+
+    [`package.json`](./package.json):
+
+    ```diff
+    ...
+
+    "scripts": {
+    +   "dev:all": "concurrently \"bun run dev:webhook\" \"bun run dev\"",
+    +   "dev:webhook": "ngrok http --url=viper-certain-early.ngrok-free.app 3000",
+      ...
+    }
+
+    ...
+    ```
+
+5. [svix](https://www.svix.com/)
+
+    > svix: 웹훅 서비스로, 웹훅 전송을 서비스로 제공하여 쉽고 안정적으로 웹훅을 전송할 수 있도록 함
+
+    ```bash
+    # Install
+    bun add svix@1.66.0
+    ```
+
+    [`route.ts`](./src/app/api/users/webhook/route.ts) 에서 clerk signing Secret을 이용하여 웹훅을 연결
