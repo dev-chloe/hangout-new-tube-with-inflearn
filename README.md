@@ -33,6 +33,8 @@ bun run dev
 
 1. [Clerk](https://clerk.com/)
 
+    <details>
+
     > Clerk: 인증 및 사용자 관리 서비스
 
     ```bash
@@ -86,7 +88,11 @@ bun run dev
     ...
     ```
 
+    </details>
+
 2. [Drizzle ORM](https://orm.drizzle.team/) with [Neon](https://neon.com/)
+
+    <details>
 
     > Drizzle ORM: 관계형 및 SQL과 유사한 쿼리 API를 모두 갖춘 유일한 ORM(Object Relational Mapping)
     > Neon: 서버리스 Postgres 플랫폼
@@ -153,7 +159,11 @@ bun run dev
     bunx drizzle-kit studio
     ```
 
+    </details>
+
 3. [ngrok](https://ngrok.com/)
+
+    <details>
 
     > ngrok: 로컬에서 실행 중인 서버를 인터넷에서 접근 가능한 공용 URL로 안전하게 노출시켜주는 도구
 
@@ -178,7 +188,11 @@ bun run dev
     CLERK_SIGNING_SECRET=YOUR_SIGNING_SECRET
     ```
 
+    </details>
+
 4. [concurrently](https://github.com/open-cli-tools/concurrently)
+
+    <details>
 
     > concurrently: 여러 개의 명령어를 동시에 실행할 수 있도록 해주는 Npm 패키지
 
@@ -201,7 +215,11 @@ bun run dev
     ...
     ```
 
+    </details>
+
 5. [svix](https://www.svix.com/)
+
+    <details>
 
     > svix: 웹훅 서비스로, 웹훅 전송을 서비스로 제공하여 쉽고 안정적으로 웹훅을 전송할 수 있도록 함
 
@@ -211,3 +229,252 @@ bun run dev
     ```
 
     [`route.ts`](./src/app/api/users/webhook/route.ts) 에서 clerk signing Secret을 이용하여 웹훅을 연결
+
+    </details>
+
+6. [tRPC](https://trpc.io/)
+
+    <details>
+
+    > tRPC(TypeScript Remote Procedure Call):
+    > - TypeScript 기반의 원격 프로시저 호출(RPC) 프레임워크
+    > - 클라이언트와 서버 간의 통신을 간편하고 타입 안전하게 만들어주며, 서버에 정의된 함수(프로시저)를 클라이언트에서 마치 로컬 함수처럼 호출할 수 있도록 함
+
+    ```bash
+    # Install
+    bun add @trpc/server@11.0.0 @trpc/client@11.0.0 @trpc/react-query@11.0.0 @tanstack/react-query@5.80.6 zod client-only server-only
+    ```
+
+    [Set up with React Server Compoents](https://trpc.io/docs/client/react/server-components)
+
+    [`src/trpc/init.ts`](./src/trpc/init.ts):
+
+    ```typescript
+    import { initTRPC } from '@trpc/server';
+    import { cache } from 'react';
+    export const createTRPCContext = cache(async () => {
+      /**
+      * @see: https://trpc.io/docs/server/context
+      */
+      return { userId: 'user_123' };
+    });
+    // Avoid exporting the entire t-object
+    // since it's not very descriptive.
+    // For instance, the use of a t variable
+    // is common in i18n libraries.
+    const t = initTRPC.create({
+      /**
+      * @see https://trpc.io/docs/server/data-transformers
+      */
+      // transformer: superjson,
+    });
+    // Base router and procedure helpers
+    export const createTRPCRouter = t.router;
+    export const createCallerFactory = t.createCallerFactory;
+    export const baseProcedure = t.procedure;
+    ```
+
+    [`src/trpc/routers/_app.ts`](./src/trpc/routers/_app.ts):
+
+    ```typescript
+    import { z } from 'zod';
+    import { baseProcedure, createTRPCRouter } from '../init';
+
+    export const appRouter = createTRPCRouter({
+      hello: baseProcedure
+        .input(
+          z.object({
+            text: z.string(),
+          }),
+        )
+        .query((opts) => {
+          return {
+            greeting: `hello ${opts.input.text}`,
+          };
+        }),
+    });
+    export type AppRouter = typeof appRouter;
+    ```
+
+    [`src/app/api/trpc/[trpc]/route.ts`](./src/app/api/trpc/[trpc]/route.ts):
+
+    ```typescript
+    import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
+    import { createTRPCContext } from '@/trpc/init';
+    import { appRouter } from '@/trpc/routers/_app';
+
+    const handler = (req: Request) =>
+      fetchRequestHandler({
+        endpoint: '/api/trpc',
+        req,
+        router: appRouter,
+        createContext: createTRPCContext,
+      });
+
+    export { handler as GET, handler as POST };
+    ```
+
+    [`src/trpc/query-client.ts`](./src/trpc/query-client.ts):
+
+    ```typescript
+    import { defaultShouldDehydrateQuery, QueryClient } from '@tanstack/react-query';
+
+    export function makeQueryClient() {
+      return new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30 * 1000,
+          },
+          dehydrate: {
+            shouldDehydrateQuery: (query) =>
+              defaultShouldDehydrateQuery(query) ||
+              query.state.status === 'pending',
+          },
+          hydrate: {},
+        },
+      });
+    }
+    ```
+
+    [`src/trpc/client.tsx`](./src/trpc/client.tsx):
+
+    ```typescript
+    'use client';
+    import type { QueryClient } from '@tanstack/react-query';
+    import { QueryClientProvider } from '@tanstack/react-query';
+    import { httpBatchLink } from '@trpc/client';
+    import { createTRPCReact } from '@trpc/react-query';
+    import { useState } from 'react';
+    import { makeQueryClient } from './query-client';
+    import type { AppRouter } from './routers/_app';
+
+    export const trpc = createTRPCReact<AppRouter>();
+    let clientQueryClientSingleton: QueryClient;
+
+    function getQueryClient() {
+      if (typeof window === 'undefined') {
+        return makeQueryClient();
+      }
+      return (clientQueryClientSingleton ??= makeQueryClient());
+    }
+
+    function getUrl() {
+      const base = (() => {
+        if (typeof window !== 'undefined') return '';
+        if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+        return 'http://localhost:3000';
+      })();
+      return `${base}/api/trpc`;
+    }
+
+    export function TRPCProvider(
+      props: Readonly<{
+        children: React.ReactNode;
+      }>,
+    ) {
+      const queryClient = getQueryClient();
+      const [trpcClient] = useState(() =>
+        trpc.createClient({
+          links: [
+            httpBatchLink({
+              url: getUrl(),
+            }),
+          ],
+        }),
+      );
+      return (
+        <trpc.Provider client={trpcClient} queryClient={queryClient}>
+          <QueryClientProvider client={queryClient}>
+            {props.children}
+          </QueryClientProvider>
+        </trpc.Provider>
+      );
+    }
+    ```
+
+    [`src/trpc/server.tsx`](./src/trpc/server.tsx):
+
+    ```typescript
+    import 'server-only';
+    import { createHydrationHelpers } from '@trpc/react-query/rsc';
+    import { cache } from 'react';
+    import { createCallerFactory, createTRPCContext } from './init';
+    import { makeQueryClient } from './query-client';
+    import { appRouter } from './routers/_app';
+
+    export const getQueryClient = cache(makeQueryClient);
+    const caller = createCallerFactory(appRouter)(createTRPCContext);
+    export const { trpc, HydrateClient } = createHydrationHelpers<typeof appRouter>( caller, getQueryClient );
+    ```
+
+    [`src/app/(home)/page.tsx`](./src/app/(home)/page.tsx):
+
+    ```diff
+    + import { HydrateClient, trpc } from "@/trpc/server"
+    + import PageClient from "./client"
+    + import { Suspense } from "react"
+
+    export default async function Home() {
+    +   void trpc.hello.prefetch({ text: "chloe" })
+
+    return(
+    +     <HydrateClient>
+    +       <Suspense fallback={<p>Loading...</p>}>
+    +          <PageClient />
+    +       </Suspense>
+    +     </HydrateClient>
+    )
+    ```
+
+    [`src/app/(home)/client.tsx`](./src/app/(home)/client.tsx):
+
+    ```typescript
+    "use client";
+
+    import { trpc } from "@/trpc/client";
+
+    export default function PageClient() {
+      const [ data ] = trpc.hello.useSuspenseQuery({
+        text: "chloe",
+      })
+      return (
+        <div>Page client says: { data.greeting }</div>
+      )
+    }
+    ```
+
+    </details>
+
+7. [react-error-boundary](https://www.npmjs.com/package/react-error-boundary)
+
+    <details>
+
+    > react-error-boundary: React 애플리케이션에서 예외 처리를 간편하고 유연하게 도와주는 오픈소스 라이브러리
+
+    ```bash
+    # Install
+    bun add react-error-boundary@6.0.0
+    ```
+
+    [`src/app/(home)/page.tsx`](./src/app/(home)/page.tsx):
+
+    ```diff
+    ...
+    + import { ErrorBoundary } from "react-error-boundary";
+
+    export default async function Home() {
+    ...
+
+      return(
+        <HydrateClient>
+          <Suspense fallback={<p>Loading...</p>}>
+    +      <ErrorBoundary fallback={<p>Error...</p>}>
+              <PageClient />
+    +      </ErrorBoundary>
+          </Suspense>
+        </HydrateClient>
+      )
+    }
+    ```
+
+    </details>
