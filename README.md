@@ -478,3 +478,140 @@ bun run dev
     ```
 
     </details>
+
+8. [superjson](https://www.npmjs.com/package/superjson)
+
+    <details>
+
+    > superjson:
+    > - JavaScript 객체를 안전하게 직렬화(serialize)하고 역직렬화(deserialize)할 수 있게 해주는 라이브러리
+    > - JSON.stringify와 JSON.parse가 지원하지 않는 다양한 데이터 타입을 손쉽게 다룰 수 있도록 설계
+
+    ```bash
+    # Install
+    bun add superjson@2.2.2
+    ```
+
+    [`src/trpc/init.ts`](./src/trpc/init.ts):
+
+    ```diff
+    ...
+    + import superjson from "superjson";
+
+    ...
+    ...
+
+    const t = initTRPC.create({
+    +   transformer: superjson,
+    });
+    ...
+    ```
+
+    [`src/trpc/query-client.ts`](./src/trpc/query-client.ts):
+
+    ```diff
+    ...
+    + import superjson from "superjson";
+
+    export function makeQueryClient() {
+      return new QueryClient({
+        defaultOptions: {
+          ...
+          dehydrate: {
+    +       serializeData: superjson.serialize,
+            ...
+          },
+          hydrate: {
+    +       deserializeData: superjson.deserialize,
+          },
+        },
+      });
+    }
+    ```
+
+    [`src/trpc/client.tsx`](./src/trpc/client.tsx):
+
+    ```diff
+    ...
+    + import superjson from "superjson";
+
+    ...
+    const [trpcClient] = useState(() =>
+      trpc.createClient({
+        links: [
+          httpBatchLink({
+    +       transformer: superjson,
+            url: getUrl(),
+          }),
+        ],
+      }),
+    );
+    ...
+
+    ```
+
+    </details>
+
+9. [Upstash Redis](https://www.npmjs.com/package/superjson)
+
+    <details>
+
+    > Upstash Redis:
+    > - 서버리스 아키텍처 기반의 클라우드 데이터 플랫폼
+    > - 개발자가 인프라 관리 없이 빠르고 효율적으로 데이터 저장과 처리를 할 수 있도록 지원하는 완전 관리형 서비스
+
+    ```bash
+    # Install
+    bun add @upstash/redis@1.35.0
+    bun add @upstash/ratelimit@2.0.5
+    ```
+
+    ```diff
+    // .env.local
+    ...
+    + UPSTASH_REDIS_REST_URL="YOUR_UPSTASH_REDIS_REST_URL"
+    + UPSTASH_REDIS_REST_TOKEN="YOUR_UPSTASH_REDIS_REST_TOKEN"
+    ```
+
+    [`src/lib/redis.ts`](./src/lib/redis.ts):
+
+    ```typescript
+    ...
+    import { Redis } from "@upstash/redis";
+
+    export const redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+    ```
+
+    [`src/lib/ratelimit.ts`](./src/lib/ratelimit.ts):
+
+    ```typescript
+    ...
+    import { Ratelimit } from "@upstash/ratelimit";
+    import { redis } from "./redis";
+
+    export const ratelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, "10s") // 요청 제한 설정
+    })
+    ```
+
+    [`src/trpc/init.ts`](./src/trpc/init.ts):
+
+    ```diff
+    ...
+    export const protectedProcedure = t.procedure.use(async function isAuthed(opts) {
+      ...
+    + const { success } = await ratelimit.limit(user.id);
+
+    + if(!success) {
+    +    throw new TRPCError({ code: "TOO_MANY_REQUESTS" })
+    + }
+    ...
+    ...
+    });
+    ```
+
+    </details>
