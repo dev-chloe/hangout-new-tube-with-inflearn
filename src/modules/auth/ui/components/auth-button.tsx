@@ -2,14 +2,23 @@
 
 import { Button } from "@/components/ui/button";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
-import { UserCircleIcon } from "lucide-react";
+import { ClapperboardIcon, UserCircleIcon } from "lucide-react";
 
 export default function AuthButton() {
   return (
     <>
       <SignedIn>
-        <UserButton />
-        {/* Add menu itmes for Studio and User profile */}
+        <UserButton>
+          <UserButton.MenuItems>
+            {/* Add User profile menu button */}
+            <UserButton.Link
+              href="/studio"
+              label="Studio"
+              labelIcon={<ClapperboardIcon className="size-4" />}
+            />
+            <UserButton.Action label="manageAccount" />
+          </UserButton.MenuItems>
+        </UserButton>
       </SignedIn>
 
       <SignedOut>
