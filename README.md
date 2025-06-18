@@ -615,3 +615,94 @@ bun run dev
     ```
 
     </details>
+
+10. [Mux](https://www.mux.com/)
+
+    <details>
+
+    > Mux:
+    > - 개발자를 위한 비디오 스트리밍 인프라 플랫폼
+    > - 웹사이트나 앱에 손쉽게 라이브 및 온디맨드(주문형) 비디오 기능을 추가할 수 있도록 다양한 API와 도구를 제공
+
+    ```bash
+    # Install
+    bun add @mux/mux-uploader-react@1.2.0
+    bun add @mux/mux-node@11.1.0
+    ```
+
+    ```diff
+    // .env.local
+    ...
+    + MUX_TOKEN_ID="YOUR_MUX_TOKEN_ID"
+    + MUX_SECRET_KEY="YOUR_MUX_SECRET_KEY"
+    + MUX_WEBHOOK_SECRET="YOUR_MUX_WEBHOOK_SECRET"
+    ```
+
+    [`src/lib/mux.ts`](./src/lib/mux.ts):
+
+    ```typescript
+    import Mux from "@mux/mux-node";
+
+    export const mux = new Mux({
+      tokenId: process.env.MUX_TOKEN_ID,
+      tokenSecret: process.env.MUX_SECRET_KEY,
+    })
+    ```
+
+    [`src/modules/videos/server/procedures.ts`](./src/modules/videos/server/procedures.ts):
+
+    ```diff
+    ...
+    ...
+    + import { mux } from "@/lib/mux";
+
+    export const videosRouter = createTRPCRouter({
+      create: protectedProcedure.mutation(async ({ ctx }) => {
+        ...
+
+    +     const upload = await mux.video.uploads.create({
+    +       new_asset_settings: {
+    +         passthrough: userId,
+    +         playback_policies: ["public"],
+    +         static_renditions : [{ "resolution" : "highest" }]
+    +       },
+    +       cors_origin: "*" // TODO: In peosuxrion, set to your url
+    +     })
+
+        const [ video ] = await db
+          .insert(videos)
+          .values({
+            ...
+    +       muxStatus: "waiting",
+    +       muxUploadId: upload.id,
+          })
+          .returning();
+
+        return {
+          ...
+    +     url: upload.url,
+        }
+      })
+    })
+    ```
+
+    [`src/db/schema.ts`](./src/db/schema.ts):
+
+    ```diff
+    ...
+
+    export const videos = pgTable("videos", {
+      ...
+    + muxStatus: text("mux_status"),
+    + muxAssetId: text("mux_asset_id").unique(),
+    + muxUploadId: text("mux_upload_id").unique(),
+    + muxPlaybackId: text("mux_playback_id").unique(),
+    + muxTrackId: text("mux_track_id").unique(),
+    + muxTrackStatus: text("mux_track_status"),
+      ...
+    });
+    ```
+
+    [`src/app/api/videos/webhook/route.ts`](./src/app/api/videos/webhook/route.ts)
+
+    </details>
